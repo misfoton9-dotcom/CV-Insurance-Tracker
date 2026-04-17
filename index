@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CV Insurance Live Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #f6f8fb;
+    --surface: #ffffff;
+    --border: #e6e9ef;
+    --text: #0f172a;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --success: #10b981;
+    --danger: #ef4444;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  header h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .header-meta { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; font-size: 12px; font-weight: 500; }
+  .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  button.refresh { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+  button.refresh:hover { background: #1d4ed8; }
+  button.refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+  main { padding: 24px 32px 48px; max-width: 1600px; margin: 0 auto; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); }
+  .kpi .label { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi .value { font-size: 26px; font-weight: 700; margin-top: 6px; letter-spacing: -0.02em; word-break: break-word; }
+  .kpi .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); }
+  .card h3 { font-size: 14px; font-weight: 600; margin: 0 0 14px 0; }
+  .chart-wrap { position: relative; height: 280px; }
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .table-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  input[type=search] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; min-width: 240px; outline: none; transition: border 0.15s, box-shadow 0.15s; }
+  input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .table-scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { position: sticky; top: 0; background: #f9fafb; color: var(--muted); text-align: left; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  thead th:hover { background: #eef2f7; }
+  thead th .sort-arrow { font-size: 10px; color: var(--accent); margin-left: 4px; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: #f9fafb; }
+  .table-footer { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); gap: 12px; flex-wrap: wrap; }
+  .pager button { background: var(--surface); border: 1px solid var(--border); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; margin: 0 2px; color: var(--text); }
+  .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pager button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .loading, .error { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .error { color: var(--danger); }
+  footer { text-align: center; padding: 20px; color: var(--muted); font-size: 12px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  @media (max-width: 640px) { header, main { padding-left: 16px; padding-right: 16px; } .kpi .value { font-size: 22px; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>CV Insurance Live Dashboard</h1>
+    <div class="header-meta">
+      <span class="pill">Live</span>
+      <span id="last-updated">Loading…</span>
+    </div>
+  </div>
+  <button class="refresh" id="refresh-btn">Refresh</button>
+</header>
+
+<main>
+  <div id="status" class="loading">Loading data from Google Sheets…</div>
+  <div id="dashboard" style="display:none;">
+    <div class="kpi-grid" id="kpis"></div>
+    <div class="charts-grid" id="charts"></div>
+    <div class="table-card">
+      <div class="table-header">
+        <h3>Records</h3>
+        <input type="search" id="search" placeholder="Search all columns…" />
+      </div>
+      <div class="table-scroll">
+        <table id="data-table">
+          <thead><tr id="thead-row"></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="row-count">—</span>
+        <div class="pager" id="pager"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Live data from <a id="source-link" href="#" target="_blank" rel="noopener">Google Sheets</a>. Auto-refreshes every 5 minutes.
+</footer>
+
+<script>
+  // Published CSV for the specific tab (gid=1755844640) of the given spreadsheet.
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSZO92RPIa-dyNNNTeBCJ4WQJnUQfLLScJJ5cI2GXBVWe6fObdHBNMj-1qIgVFKhyxSjwbJpI8gvuhm/pub?gid=1755844640&single=true&output=csv";
+  const REFRESH_MS = 5 * 60 * 1000;
+  const PAGE_SIZE = 25;
+
+  document.getElementById('source-link').href = CSV_URL;
+
+  const state = { rows: [], headers: [], columnTypes: {}, filtered: [], page: 1, sortBy: null, sortDir: 'asc', charts: [] };
+
+  const fmtNum = n => {
+    if (!isFinite(n)) return '—';
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return (n/1e9).toFixed(2) + 'B';
+    if (abs >= 1e6) return (n/1e6).toFixed(2) + 'M';
+    if (abs >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    if (Number.isInteger(n)) return n.toLocaleString();
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  };
+
+  const parseNumber = v => {
+    if (v === null || v === undefined || v === '') return null;
+    const s = String(v).replace(/[,\s$₹€£¥%]/g, '').trim();
+    if (s === '' || s === '-') return null;
+    const n = Number(s);
+    return isFinite(n) ? n : null;
+  };
+
+  const parseDate = v => {
+    if (!v) return null;
+    const s = String(v).trim();
+    if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      let [, a, b, y] = m;
+      a = +a; b = +b; y = +y;
+      if (y < 100) y += 2000;
+      const day = a > 12 ? a : (b > 12 ? b : a);
+      const mon = a > 12 ? b : (b > 12 ? a : b);
+      const d = new Date(y, mon - 1, day);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const detectColumnType = (rows, col) => {
+    let num = 0, date = 0, total = 0;
+    for (const r of rows) {
+      const v = r[col];
+      if (v === null || v === undefined || v === '') continue;
+      total++;
+      if (parseNumber(v) !== null) num++;
+      else if (parseDate(v) !== null) date++;
+    }
+    if (total === 0) return 'text';
+    if (num / total > 0.7) return 'number';
+    if (date / total > 0.7) return 'date';
+    return 'text';
+  };
+
+  const uniqueValues = (rows, col) => {
+    const m = new Map();
+    for (const r of rows) {
+      const v = r[col];
+      if (v === null || v === undefined || v === '') continue;
+      const k = String(v).trim();
+      if (!k) continue;
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  };
+
+  const PALETTE = ['#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#eab308'];
+
+  async function loadData() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    const status = document.getElementById('status');
+    status.textContent = 'Loading data from Google Sheets…';
+    status.className = 'loading';
+    status.style.display = 'block';
+
+    try {
+      const url = CSV_URL + (CSV_URL.includes('?') ? '&' : '?') + '_cb=' + Date.now();
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' — is the sheet published to the web?');
+      let text = await res.text();
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+      const parsed = Papa.parse(text.trim(), {
+        header: true,
+        skipEmptyLines: 'greedy',
+        transformHeader: h => h.trim()
+      });
+
+      if (!parsed.data || parsed.data.length === 0) throw new Error('Sheet returned no rows.');
+
+      const headers = (parsed.meta.fields || Object.keys(parsed.data[0] || {}))
+        .map(h => (h || '').trim()).filter(h => h !== '');
+      const rows = parsed.data.filter(r =>
+        headers.some(h => r[h] !== null && r[h] !== undefined && String(r[h]).trim() !== '')
+      );
+
+      state.rows = rows;
+      state.headers = headers;
+      state.columnTypes = {};
+      for (const h of headers) state.columnTypes[h] = detectColumnType(rows, h);
+
+      render();
+      status.style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleString();
+    } catch (e) {
+      status.className = 'error';
+      status.textContent = 'Could not load data: ' + e.message;
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Refresh';
+    }
+  }
+
+  function render() {
+    renderKPIs();
+    renderCharts();
+    state.filtered = state.rows.slice();
+    state.page = 1;
+    renderTable();
+  }
+
+  function renderKPIs() {
+    const container = document.getElementById('kpis');
+    container.innerHTML = '';
+    const kpis = [];
+    kpis.push({ label: 'Total Records', value: fmtNum(state.rows.length), sub: state.headers.length + ' columns' });
+
+    const numericCols = state.headers.filter(h => state.columnTypes[h] === 'number');
+    numericCols.slice(0, 3).forEach(col => {
+      const vals = state.rows.map(r => parseNumber(r[col])).filter(v => v !== null);
+      if (vals.length === 0) return;
+      const sum = vals.reduce((a,b) => a+b, 0);
+      const avg = sum / vals.length;
+      kpis.push({ label: col, value: fmtNum(sum), sub: 'Avg ' + fmtNum(avg) + ' · n=' + vals.length });
+    });
+
+    if (numericCols.length === 0) {
+      const textCols = state.headers.filter(h => state.columnTypes[h] === 'text');
+      for (const col of textCols) {
+        const uniq = uniqueValues(state.rows, col);
+        if (uniq.size > 1 && uniq.size <= state.rows.length * 0.8) {
+          const top = [...uniq.entries()].sort((a,b) => b[1]-a[1])[0];
+          kpis.push({ label: 'Top ' + col, value: top[0], sub: top[1] + ' records' });
+          if (kpis.length >= 4) break;
+        }
+      }
+    }
+
+    for (const k of kpis) {
+      const div = document.createElement('div');
+      div.className = 'kpi';
+      div.innerHTML = `<div class="label">${escapeHtml(k.label)}</div><div class="value">${escapeHtml(String(k.value))}</div><div class="sub">${escapeHtml(k.sub || '')}</div>`;
+      container.appendChild(div);
+    }
+  }
+
+  function renderCharts() {
+    const container = document.getElementById('charts');
+    container.innerHTML = '';
+    state.charts.forEach(c => { try { c.destroy(); } catch(e){} });
+    state.charts = [];
+
+    const numericCols = state.headers.filter(h => state.columnTypes[h] === 'number');
+    const dateCols = state.headers.filter(h => state.columnTypes[h] === 'date');
+    const textCols = state.headers.filter(h => state.columnTypes[h] === 'text');
+
+    if (dateCols.length > 0 && numericCols.length > 0) addTimeSeriesChart(container, dateCols[0], numericCols[0]);
+    else if (dateCols.length > 0) addCountsOverTime(container, dateCols[0]);
+
+    const catCols = textCols
+      .map(c => ({ col: c, uniq: uniqueValues(state.rows, c) }))
+      .filter(x => x.uniq.size >= 2 && x.uniq.size <= 50)
+      .sort((a, b) => a.uniq.size - b.uniq.size);
+
+    if (catCols.length > 0) {
+      const chosen = catCols.find(x => x.uniq.size <= 12) || catCols[0];
+      addCategoryBarChart(container, chosen.col, chosen.uniq, numericCols[0]);
+    }
+    if (catCols.length > 1) {
+      const chosen = catCols[1];
+      if (chosen.uniq.size <= 10) addPieChart(container, chosen.col, chosen.uniq);
+    }
+    if (numericCols.length >= 2) addNumericComparison(container, numericCols.slice(0, 6));
+
+    if (container.children.length === 0) {
+      const msg = document.createElement('div');
+      msg.className = 'card';
+      msg.innerHTML = '<h3>Overview</h3><p style="color:var(--muted);font-size:13px;">No charts could be auto-generated. See the table below.</p>';
+      container.appendChild(msg);
+    }
+  }
+
+  function makeChartCard(title) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const h = document.createElement('h3');
+    h.textContent = title;
+    const wrap = document.createElement('div');
+    wrap.className = 'chart-wrap';
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    card.appendChild(h); card.appendChild(wrap);
+    return { card, canvas };
+  }
+
+  function addTimeSeriesChart(container, dateCol, numCol) {
+    const buckets = new Map();
+    for (const r of state.rows) {
+      const d = parseDate(r[dateCol]);
+      const n = parseNumber(r[numCol]);
+      if (!d || n === null) continue;
+      const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      buckets.set(key, (buckets.get(key) || 0) + n);
+    }
+    if (buckets.size === 0) return;
+    const keys = [...buckets.keys()].sort();
+    const values = keys.map(k => buckets.get(k));
+    const { card, canvas } = makeChartCard(numCol + ' over time (' + dateCol + ')');
+    container.appendChild(card);
+    state.charts.push(new Chart(canvas, {
+      type: 'line',
+      data: { labels: keys, datasets: [{ label: numCol, data: values, borderColor: PALETTE[0], backgroundColor: PALETTE[0] + '20', fill: true, tension: 0.3, pointRadius: 3 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    }));
+  }
+
+  function addCountsOverTime(container, dateCol) {
+    const buckets = new Map();
+    for (const r of state.rows) {
+      const d = parseDate(r[dateCol]);
+      if (!d) continue;
+      const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      buckets.set(key, (buckets.get(key) || 0) + 1);
+    }
+    if (buckets.size === 0) return;
+    const keys = [...buckets.keys()].sort();
+    const values = keys.map(k => buckets.get(k));
+    const { card, canvas } = makeChartCard('Records over time (' + dateCol + ')');
+    container.appendChild(card);
+    state.charts.push(new Chart(canvas, {
+      type: 'bar',
+      data: { labels: keys, datasets: [{ data: values, backgroundColor: PALETTE[0], borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    }));
+  }
+
+  function addCategoryBarChart(container, col, uniq, numCol) {
+    let labels, values, title;
+    if (numCol) {
+      const sums = new Map();
+      for (const r of state.rows) {
+        const k = String(r[col] || '').trim();
+        const n = parseNumber(r[numCol]);
+        if (!k || n === null) continue;
+        sums.set(k, (sums.get(k) || 0) + n);
+      }
+      const sorted = [...sums.entries()].sort((a,b) => b[1]-a[1]).slice(0, 12);
+      labels = sorted.map(x => x[0]);
+      values = sorted.map(x => x[1]);
+      title = numCol + ' by ' + col;
+    } else {
+      const entries = [...uniq.entries()].sort((a,b) => b[1]-a[1]).slice(0, 12);
+      labels = entries.map(x => x[0]);
+      values = entries.map(x => x[1]);
+      title = 'Records by ' + col;
+    }
+    if (labels.length === 0) return;
+    const { card, canvas } = makeChartCard(title);
+    container.appendChild(card);
+    state.charts.push(new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 } } } }
+    }));
+  }
+
+  function addPieChart(container, col, uniq) {
+    const entries = [...uniq.entries()].sort((a,b) => b[1]-a[1]).slice(0, 10);
+    const labels = entries.map(x => x[0]);
+    const values = entries.map(x => x[1]);
+    const { card, canvas } = makeChartCard('Distribution: ' + col);
+    container.appendChild(card);
+    state.charts.push(new Chart(canvas, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 2, borderColor: '#fff' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } } }
+    }));
+  }
+
+  function addNumericComparison(container, cols) {
+    const sums = cols.map(c => {
+      const vals = state.rows.map(r => parseNumber(r[c])).filter(v => v !== null);
+      return vals.reduce((a,b) => a+b, 0);
+    });
+    const { card, canvas } = makeChartCard('Numeric Totals Comparison');
+    container.appendChild(card);
+    state.charts.push(new Chart(canvas, {
+      type: 'bar',
+      data: { labels: cols, datasets: [{ data: sums, backgroundColor: cols.map((_, i) => PALETTE[i % PALETTE.length]), borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } }
+    }));
+  }
+
+  function renderTable() {
+    const theadRow = document.getElementById('thead-row');
+    const tbody = document.getElementById('tbody');
+    theadRow.innerHTML = ''; tbody.innerHTML = '';
+    for (const h of state.headers) {
+      const th = document.createElement('th');
+      const arrow = state.sortBy === h ? (state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+      th.innerHTML = escapeHtml(h) + (arrow ? '<span class="sort-arrow">' + arrow + '</span>' : '');
+      th.addEventListener('click', () => {
+        if (state.sortBy === h) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        else { state.sortBy = h; state.sortDir = 'asc'; }
+        sortFiltered(); renderTable();
+      });
+      theadRow.appendChild(th);
+    }
+    const total = state.filtered.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    const start = (state.page - 1) * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, total);
+    const slice = state.filtered.slice(start, end);
+    for (const row of slice) {
+      const tr = document.createElement('tr');
+      for (const h of state.headers) {
+        const td = document.createElement('td');
+        td.textContent = row[h] == null ? '' : String(row[h]);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    document.getElementById('row-count').textContent = total === 0 ? 'No rows' : `Showing ${start + 1}–${end} of ${total} rows`;
+    renderPager(pages);
+  }
+
+  function renderPager(pages) {
+    const el = document.getElementById('pager');
+    el.innerHTML = '';
+    if (pages <= 1) return;
+    const mkBtn = (label, page, disabled, active) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      if (disabled) b.disabled = true;
+      if (active) b.classList.add('active');
+      b.addEventListener('click', () => { state.page = page; renderTable(); });
+      return b;
+    };
+    el.appendChild(mkBtn('‹', state.page - 1, state.page === 1));
+    const windowSize = 5;
+    let start = Math.max(1, state.page - 2);
+    let end = Math.min(pages, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+    for (let i = start; i <= end; i++) el.appendChild(mkBtn(String(i), i, false, i === state.page));
+    el.appendChild(mkBtn('›', state.page + 1, state.page === pages));
+  }
+
+  function sortFiltered() {
+    if (!state.sortBy) return;
+    const col = state.sortBy;
+    const type = state.columnTypes[col];
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    state.filtered.sort((a, b) => {
+      const va = a[col], vb = b[col];
+      if (va == null || va === '') return 1;
+      if (vb == null || vb === '') return -1;
+      if (type === 'number') return ((parseNumber(va) ?? 0) - (parseNumber(vb) ?? 0)) * dir;
+      if (type === 'date') {
+        const da = parseDate(va), db = parseDate(vb);
+        return ((da ? da.getTime() : 0) - (db ? db.getTime() : 0)) * dir;
+      }
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }
+
+  document.getElementById('search').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    state.filtered = !q ? state.rows.slice() : state.rows.filter(row => state.headers.some(h => String(row[h] ?? '').toLowerCase().includes(q)));
+    state.page = 1;
+    sortFiltered(); renderTable();
+  });
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', loadData);
+  loadData();
+  setInterval(loadData, REFRESH_MS);
+</script>
+</body>
+</html>
