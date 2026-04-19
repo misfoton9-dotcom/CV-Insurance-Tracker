@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Insurance Claims — Report Summary</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:linear-gradient(180deg,#f8fafc 0%,#eef2ff 100%);
+    color:#0f172a;
+    min-height:100vh;
+  }
+  header{
+    background:linear-gradient(120deg,#1e293b 0%,#312e81 100%);
+    color:#fff;
+    padding:22px 32px;
+    box-shadow:0 4px 16px rgba(15,23,42,.15);
+  }
+  header h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+  header p{margin:4px 0 0;font-size:13px;opacity:.8}
+  .container{max-width:1400px;margin:0 auto;padding:24px 32px 48px}
+
+  /* KPI strip */
+  .kpis{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:14px;
+    margin-bottom:22px;
+  }
+  .kpi{
+    background:#fff;
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    padding:18px 20px;
+    box-shadow:0 1px 3px rgba(15,23,42,.06);
+    position:relative;
+    overflow:hidden;
+  }
+  .kpi::before{
+    content:"";
+    position:absolute;
+    top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,#2563eb,#7c3aed);
+  }
+  .kpi .label{
+    font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    color:#64748b;font-weight:600;margin-bottom:6px;
+  }
+  .kpi .value{
+    font-size:24px;font-weight:700;letter-spacing:-.02em;color:#0f172a;
+  }
+  .kpi .sub{font-size:11px;color:#64748b;margin-top:2px}
+
+  /* Two-column grid for charts */
+  .grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+    margin-bottom:16px;
+  }
+  @media (max-width:900px){ .grid-2{grid-template-columns:1fr} }
+
+  .card{
+    background:#fff;
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    padding:18px;
+    box-shadow:0 1px 3px rgba(15,23,42,.06);
+  }
+  .card h3{
+    margin:0 0 12px;
+    font-size:14px;
+    font-weight:600;
+    color:#0f172a;
+    text-align:center;
+  }
+  .chart-wrap{position:relative;height:300px}
+  .chart-wrap.tall{height:360px}
+
+  footer{text-align:center;font-size:12px;color:#64748b;padding:18px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Insurance Claims — Report Summary</h1>
+  <p>Replicating the Report Summary sheet layout</p>
+</header>
+
+<div class="container">
+
+  <!-- KPI strip derived from the Claim Summary Status totals -->
+  <div class="kpis">
+    <div class="kpi"><div class="label">Total Claims</div><div class="value">191</div><div class="sub">Across all statuses</div></div>
+    <div class="kpi"><div class="label">Completed</div><div class="value">119</div><div class="sub">62.3%</div></div>
+    <div class="kpi"><div class="label">In Process</div><div class="value">60</div><div class="sub">31.4%</div></div>
+    <div class="kpi"><div class="label">Settled</div><div class="value">100</div><div class="sub">From claim status</div></div>
+    <div class="kpi"><div class="label">Registered</div><div class="value">41</div><div class="sub">46.59%</div></div>
+  </div>
+
+  <!-- Row 1: Claim Amt vs Assessed Amt (combo)  |  Vehicle Status (pie) -->
+  <div class="grid-2">
+    <div class="card">
+      <h3>Claim Amt and Assessed Amt</h3>
+      <div class="chart-wrap"><canvas id="chart-claim-assessed"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Vehicle Status Distribution</h3>
+      <div class="chart-wrap"><canvas id="chart-vehicle-status"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Row 2: Count vs Nature (bar)  |  Claim Summary Status (area with %) -->
+  <div class="grid-2">
+    <div class="card">
+      <h3>Count vs. Nature</h3>
+      <div class="chart-wrap"><canvas id="chart-count-nature"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Claim Summary Status</h3>
+      <div class="chart-wrap"><canvas id="chart-summary-status"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Row 3: Claim Status Summary (horizontal bar, full-width) -->
+  <div class="card">
+    <h3>Claim Status Summary</h3>
+    <div class="chart-wrap tall"><canvas id="chart-status-summary"></canvas></div>
+  </div>
+
+</div>
+
+<footer>Insurance Claims Dashboard &middot; Report Summary view</footer>
+
+<script>
+/* ============================================================
+   DATA — values read from the Report Summary sheet screenshot.
+   Edit these arrays when the underlying data changes.
+   ============================================================ */
+
+// Chart 1: Claim Amt and Assessed Amt by Insurer (combo chart)
+const insurers     = ["NECO", "SPIL", "HEI", "NLGI", "IGI", "SICL"];
+const claimAmt     = [9800000, 4100000, 3200000, 900000, 500000, 1000000];
+const assessedAmt  = [4900000, 3500000, 2600000, 400000, 250000, 500000];
+
+// Chart 2: Vehicle Status Distribution (pie)
+const vehicleStatus = {
+  labels: ["Completed", "In Process", "Open", "Other"],
+  values: [119, 60, 6, 6],
+  colors: ["#3b82f6", "#eab308", "#22c55e", "#60a5fa"]
+};
+
+// Chart 3: Count vs. Nature (bar)
+const natureLabels = ["OD", "OD/TP", "TP", "OD/PEU", "OD/Gen-Z"];
+const natureCounts = [140, 15, 2, 2, 2];
+
+// Chart 4: Claim Summary Status (area + % labels)
+const summaryStatus = {
+  labels: ["DV Received", "Registered", "Doc Submitted", "Intimated", "PR Pending", "Other"],
+  counts: [5, 41, 7, 0, 0, 35],
+  // percentages derived from counts
+};
+summaryStatus.total = summaryStatus.counts.reduce((a,b) => a+b, 0);
+summaryStatus.percentages = summaryStatus.counts.map(c =>
+  summaryStatus.total ? +((c / summaryStatus.total) * 100).toFixed(2) : 0
+);
+
+// Chart 5: Claim Status Summary (horizontal bar)
+const statusSummary = {
+  labels: ["Settled", "DV Received", "Registered", "Doc Submitted", "Intimated", "PR Pending", "Other", "Total In Process"],
+  values: [100, 3, 41, 5, 0, 0, 35, 60]
+};
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function fmtNum(n){
+  if(n === null || n === undefined || isNaN(n)) return "—";
+  if(Math.abs(n) >= 1e7) return (n/1e7).toFixed(2) + "Cr";
+  if(Math.abs(n) >= 1e5) return (n/1e5).toFixed(2) + "L";
+  if(Math.abs(n) >= 1e3) return (n/1e3).toFixed(1) + "K";
+  return n.toLocaleString();
+}
+
+// Plugin to draw percentage labels above each point on the Claim Summary Status area chart
+const percentLabelPlugin = {
+  id: "percentLabel",
+  afterDatasetsDraw(chart, args, opts) {
+    const ds = chart.data.datasets[0];
+    const meta = chart.getDatasetMeta(0);
+    const { ctx } = chart;
+    const pct = chart.$percentages || [];
+    ctx.save();
+    ctx.font = "11px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.fillStyle = "#ef4444";
+    ctx.textAlign = "center";
+    meta.data.forEach((pt, i) => {
+      const p = pct[i] ?? 0;
+      ctx.fillText(p.toFixed(2) + "%", pt.x, pt.y + 18);
+    });
+    ctx.restore();
+  }
+};
+Chart.register(percentLabelPlugin);
+
+/* ============================================================
+   CHART 1 — Claim Amt and Assessed Amt (bar + line combo)
+   ============================================================ */
+new Chart(document.getElementById("chart-claim-assessed"), {
+  data: {
+    labels: insurers,
+    datasets: [
+      {
+        type: "bar",
+        label: "Claim Amt",
+        data: claimAmt,
+        backgroundColor: "#3b82f6",
+        borderRadius: 2,
+        order: 2
+      },
+      {
+        type: "line",
+        label: "Assessed Amt",
+        data: assessedAmt,
+        borderColor: "#ef4444",
+        backgroundColor: "#ef4444",
+        tension: 0.15,
+        pointRadius: 3,
+        borderWidth: 2,
+        order: 1
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "top", labels: { font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ctx.dataset.label + ": " + ctx.parsed.y.toLocaleString()
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: "Insurer", font: { size: 11 } },
+        grid: { display: false }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { callback: (v) => v.toLocaleString(), font: { size: 10 } },
+        grid: { color: "#f1f5f9" }
+      }
+    }
+  }
+});
+
+/* ============================================================
+   CHART 2 — Vehicle Status Distribution (pie)
+   ============================================================ */
+new Chart(document.getElementById("chart-vehicle-status"), {
+  type: "pie",
+  data: {
+    labels: vehicleStatus.labels,
+    datasets: [{
+      data: vehicleStatus.values,
+      backgroundColor: vehicleStatus.colors,
+      borderColor: "#fff",
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "right", labels: { font: { size: 12 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+            const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+            return ctx.label + ": " + ctx.parsed + " (" + pct + "%)";
+          }
+        }
+      }
+    }
+  }
+});
+
+/* ============================================================
+   CHART 3 — Count vs. Nature (bar)
+   ============================================================ */
+new Chart(document.getElementById("chart-count-nature"), {
+  type: "bar",
+  data: {
+    labels: natureLabels,
+    datasets: [{
+      label: "Count",
+      data: natureCounts,
+      backgroundColor: "#3b82f6",
+      borderRadius: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: "Nature", font: { size: 11 } },
+        grid: { display: false }
+      },
+      y: {
+        title: { display: true, text: "Count", font: { size: 11 } },
+        beginAtZero: true,
+        grid: { color: "#f1f5f9" },
+        ticks: { font: { size: 10 } }
+      }
+    }
+  }
+});
+
+/* ============================================================
+   CHART 4 — Claim Summary Status (area with % labels)
+   ============================================================ */
+const summaryChart = new Chart(document.getElementById("chart-summary-status"), {
+  type: "line",
+  data: {
+    labels: summaryStatus.labels,
+    datasets: [{
+      label: "Count",
+      data: summaryStatus.counts,
+      borderColor: "#3b82f6",
+      backgroundColor: "rgba(59, 130, 246, 0.25)",
+      fill: true,
+      tension: 0,
+      pointRadius: 4,
+      pointBackgroundColor: "#3b82f6",
+      pointBorderColor: "#fff",
+      pointBorderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const pct = summaryStatus.percentages[ctx.dataIndex];
+            return ctx.parsed.y + " (" + pct + "%)";
+          }
+        }
+      },
+      // label display on points
+      datalabels: { display: false }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      y: {
+        beginAtZero: true,
+        max: 50,
+        ticks: { stepSize: 10, font: { size: 10 } },
+        grid: { color: "#f1f5f9" }
+      }
+    }
+  }
+});
+// attach percentages so the plugin can read them
+summaryChart.$percentages = summaryStatus.percentages;
+summaryChart.update();
+
+/* ============================================================
+   CHART 5 — Claim Status Summary (horizontal bar)
+   ============================================================ */
+new Chart(document.getElementById("chart-status-summary"), {
+  type: "bar",
+  data: {
+    labels: statusSummary.labels,
+    datasets: [{
+      label: "Count",
+      data: statusSummary.values,
+      backgroundColor: "#1e40af",
+      borderRadius: 2
+    }]
+  },
+  options: {
+    indexAxis: "y",
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "top", labels: { font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => "Count: " + ctx.parsed.x
+        }
+      }
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        grid: { color: "#f1f5f9" },
+        ticks: { font: { size: 10 } }
+      },
+      y: {
+        title: { display: true, text: "Count", font: { size: 11 } },
+        grid: { display: false },
+        ticks: { font: { size: 11 } }
+      }
+    }
+  }
+});
+</script>
+
+</body>
+</html>
